@@ -1,6 +1,6 @@
 This is a GATK variant calling snakemake pipeline written by Sherine Awad. 
 
-To run the pipeline, eidt the config file to match your sample names, your reference genome then: 
+To run the pipeline, edit the config file to match your sample names, your reference genome then: 
 
 
     snakemake -jn 
