@@ -1,4 +1,4 @@
-SAMPLES : ['sample1', 'sample2'] 
+SAMPLES : ['sample1'] 
 
 GENOME: "Homo_sapiens_assembly38"
 DBSNP: "Homo_sapiens_assembly38.dbsnp138.vcf"
@@ -17,6 +17,8 @@ humanDB : /rds/project/yhbl2/rds-yhbl2-genehunter/SM/tools/annovar/humandb
 annovar_prefix: "hg38_multianno"
 version : hg38
 
+INTERVALS_FILE : 'intervals.list'
+GENOMEDB: "my_database"
 QD: 2.0
 QUAL: 30.0 
 SOR: 3.0 

@@ -1,6 +1,5 @@
 configfile: "config.yaml"
 
-
 rule all:
       input:
         expand("{genome}.fasta", genome = config['GENOME']),
@@ -19,7 +18,7 @@ rule all:
         expand("{genome}.3.bt2", genome = config['GENOME']),
         expand("{genome}.4.bt2", genome = config['GENOME']),
         expand("{sample}.g.vcf", sample=config['SAMPLES']), 
-        expand("{cohort}.g.vcf", cohort=config['ALL_VCF']),
+        directory(expand("{my_db}", my_db = config['GENOMEDB'])),
         expand("{cohort}.vcf.gz", cohort=config['ALL_VCF']),
         expand("{COHORT}.{prefix}.vcf", COHORT = config['ALL_VCF'],prefix = config['annovar_prefix'] ),
         output = expand("{COHORT}.{prefix}.filtered.vcf.gz", COHORT=config['ALL_VCF'], prefix=config['annovar_prefix'])
@@ -57,7 +56,6 @@ rule download:
           wget https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz
           wget https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz.tbi
           wget https://storage.googleapis.com/genomics-public-data/references/hg38/v0/Homo_sapiens_assembly38.dict
-           
          """ 
 
 rule index:
@@ -79,6 +77,7 @@ rule index:
           bowtie2-build {input} {params}
           samtools faidx {input} 
          """ 
+
 rule trim: 
     input: 
        r1 = "{sample}.r_1.fq.gz",
@@ -122,7 +121,6 @@ rule dedup:
      shell:
         "picard MarkDuplicates I={input} O={output[0]} CREATE_INDEX=true M={output[1]}"
 
-
 rule recalibrate: 
     input:  
          sample = '{sample}.dedupped.bam', 
@@ -131,11 +129,10 @@ rule recalibrate:
          '{sample}.recal_data.table',
          '{sample}.recalibrated.bam'
     params: 
-        mem = "-Xmx800g",
+        mem = "-Xmx100g",
         knownsites1 = config['DBSNP'],
         knownsites2 = config['INDELS'],
         knownsites3 = config['GOLD_STANDARD']
-   
     shell:
        """
        gatk --java-options {params.mem} BaseRecalibrator -I {input.sample} -R {input.genome} --known-sites {params.knownsites1} --known-sites {params.knownsites2} --known-sites {params.knownsites3} -O {output[0]}
@@ -147,40 +144,42 @@ rule tovcf:
       "{sample}.recalibrated.bam",
       expand("{genome}.fasta", genome=config['GENOME'])
    params:
-     mem_threads = {"-Xmx500g -XX:ParallelGCThreads=4"},
+     mem_threads = {"-Xmx100g -XX:ParallelGCThreads=4"},
    output:
        "{sample}.g.vcf" 
    shell:
        """
-       gatk --java-options "{params.mem_threads}" HaplotypeCaller -R {input[1]} -I {input[0]} -ERC GVCF -L chrM -O {output[0]}
+       gatk --java-options "{params.mem_threads}" HaplotypeCaller -R {input[1]} -I {input[0]} -ERC GVCF -O {output[0]}
        """
 
-rule merge:
-     input: 
+rule GenomeDBImport: 
+     input:
          sample = expand("{sample}.g.vcf", sample = config['SAMPLES']),
          genome = expand("{genome}.fasta", genome=config['GENOME'])
-     params: 
-         mem = {"-Xmx600g"},
+     params:
+         INTERVALS = config['INTERVALS_FILE'],
+         DB = config['GENOMEDB'],
+         mem = {"-Xmx100g"},
          I =  lambda w: "-V " + " -V ".join(expand("{sample}.g.vcf", sample =config['SAMPLES']))
-     output: 
-         expand("{cohort}.g.vcf", cohort=config['ALL_VCF'])   
+     output:
+        directory(expand("{my_db}", my_db = config['GENOMEDB'])) 
      shell:
-         """ 
-         gatk --java-options "{params.mem}" CombineGVCFs -R {input.genome}  {params.I} -O {output}
-         """ 
+         """
+         gatk --java-options {params.mem} GenomicsDBImport {params.I} --genomicsdb-workspace-path {params.DB} -L {params.INTERVALS} 
+         """
 
 rule jointcall: 
     input:
-       cohort = expand("{cohort}.g.vcf", cohort = config['ALL_VCF']),
+       DB = directory(expand("{my_db}", my_db = config['GENOMEDB'])), 
        genome = expand("{genome}.fasta", genome=config['GENOME'])
     params:
-       mem = {"-Xmx600g"},
+       mem = {"-Xmx100g"},
     output:
        expand("{cohort}.vcf.gz", cohort=config['ALL_VCF'])
     shell:
-       """
-       gatk --java-options "{params.mem}" GenotypeGVCFs -R {input.genome} -V {input.cohort} -O {output}
-       """
+        """
+          gatk --java-options {params.mem} GenotypeGVCFs -R {input.genome} -V gendb://{input.DB} -O {output}
+        """
 
 rule annotate: 
      input: 
@@ -194,7 +193,8 @@ rule annotate:
          expand("{COHORT}.{prefix}.vcf", COHORT = config['ALL_VCF'], prefix =config['annovar_prefix'] )
      shell:
          """ 
-          {params.ANNOVAR}/table_annovar.pl {input.vcf} {params.humanDB} -buildver {params.version} -out {params.output} -remove -protocol refGene,ensGene,cytoBand,exac03,gnomad_exome,avsnp147,dbnsfp33a,clinvar_20170130,revel -operation g,g,f,f,f,f,f,f,f  -nastring . -vcfinput  
+          {params.ANNOVAR}/table_annovar.pl {input.vcf} {params.humanDB} -buildver {params.version} -out {params.output} \
+          -remove -protocol refGene,ensGene,cytoBand,exac03,gnomad_exome,avsnp147,dbnsfp33a,clinvar_20170130,revel -operation g,g,f,f,f,f,f,f,f  -nastring . -vcfinput  
          """
 
 rule hard_filter: 
