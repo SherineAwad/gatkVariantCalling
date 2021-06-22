@@ -24,7 +24,9 @@ For example, for 10 cores use:
 
 This will pull automatically the same versiosn of tools we used. Conda has to be installed in the system, in addition to snakemake. 
 
-### Dry run 
+
+### Dry Run
+
 
 For a dry run use: 
   

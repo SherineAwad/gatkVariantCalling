@@ -1,5 +1,5 @@
 # conda environment configuration for snakemake
-name: Variant Calling 
+name: VariantCalling 
 channels:
     - bioconda
     - conda-forge
