@@ -14,15 +14,17 @@ where n is the number of cores for example for 10 cores use:
 
 For less froodiness, use conda:
 
-   snakemkae -jn --use-conda 
+
+    snakemake -jn --use-conda 
+
 
 For example, for 10 cores use: 
 
-   snakemake -j10 --use-conda 
+    snakemake -j10 --use-conda 
 
 This will pull automatically the same versiosn of tools we used. Conda has to be installed in the system, in addition to snakemake. 
 
-### Dry Run 
+### Dry run 
 
 For a dry run use: 
   
