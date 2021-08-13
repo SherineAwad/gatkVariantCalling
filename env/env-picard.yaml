@@ -1,7 +1,6 @@
 # conda environment configuration for snakemake --use-conda
 channels:
-    - conda-forge
     - bioconda
     - defaults
 dependencies:
-    - picared=2.24.2 
+    - picard=2.25.6
