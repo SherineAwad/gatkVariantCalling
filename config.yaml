@@ -1,5 +1,5 @@
 SAMPLES : ['sample1'] 
-
+PAIRED: TRUE 
 GENOME: "Homo_sapiens_assembly38"
 DBSNP: "Homo_sapiens_assembly38.dbsnp138.vcf"
 INDELS: "Homo_sapiens_assembly38.known_indels.vcf.gz"
