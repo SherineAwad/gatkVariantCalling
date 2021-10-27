@@ -1,0 +1,6 @@
+# conda environment configuration for snakemake --use-conda
+channels:
+    - bioconda
+    - defaults
+dependencies:
+    - trim-galore=0.6.6
