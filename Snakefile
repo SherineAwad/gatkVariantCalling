@@ -2,6 +2,10 @@ configfile: "config.yaml"
 
 ruleorder: index > trim > tosam > AddRG > dedup > recalibrate > tovcf >  GenomeDBImport > jointcall > hard_filter > annotate  
 
+with open(config['SAMPLES']) as fp:
+    SAMPLES= fp.read().splitlines()
+print(SAMPLES)
+
 
 rule all:
       input:
@@ -27,7 +31,7 @@ rule all:
         expand("{genome}.2.bt2", genome = config['GENOME']),
         expand("{genome}.3.bt2", genome = config['GENOME']),
         expand("{genome}.4.bt2", genome = config['GENOME']),
-        expand("{sample}.g.vcf", sample=config['SAMPLES']), 
+        expand("{sample}.g.vcf", sample=SAMPLES), 
         directory(expand("{my_db}", my_db = config['GENOMEDB'])),
         expand("{cohort}.vcf.gz", cohort=config['ALL_VCF']),
         expand("{COHORT}.filtered.vcf.gz", COHORT = config['ALL_VCF']),
@@ -214,13 +218,13 @@ rule tovcf:
 
 rule GenomeDBImport: 
      input:
-         sample = expand("{sample}.g.vcf", sample = config['SAMPLES']),
+         sample = expand("{sample}.g.vcf", sample = SAMPLES),
          genome = expand("{genome}.fasta", genome=config['GENOME'])
      params:
          INTERVALS = config['INTERVALS_FILE'],
          DB = config['GENOMEDB'],
          mem = {"-Xmx100g"},
-         I =  lambda w: "-V " + " -V ".join(expand("{sample}.g.vcf", sample =config['SAMPLES']))
+         I =  lambda w: "-V " + " -V ".join(expand("{sample}.g.vcf", sample = SAMPLES))
      log: "logs/dbimport.log"
      benchmark: "logs/DBImport.benchmark"
      conda: 'env/env-gatk.yaml'

@@ -1,4 +1,4 @@
-SAMPLES : ['sample1'] 
+SAMPLES : samples.tsv 
 PAIRED: TRUE 
 GENOME: "Homo_sapiens_assembly38"
 DBSNP: "Homo_sapiens_assembly38.dbsnp138.vcf"
