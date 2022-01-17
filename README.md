@@ -5,6 +5,8 @@
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
 
+Snakemake Workflow for Variant Calling
+==========================================
 
 This is a GATK variant calling snakemake pipeline written by Sherine Awad. 
 
