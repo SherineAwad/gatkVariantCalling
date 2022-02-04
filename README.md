@@ -65,7 +65,7 @@ or:
     snakemake -j1 configfile config-WGS.yaml 
 
 
-### Resources 
+### References 
 
 1.  Brouard, Jean-Simon, Flavio Schenkel, Andrew Marete, and Nathalie Bissonnette. "The GATK joint genotyping workflow is appropriate for calling variants in RNA-seq experiments." Journal of animal science and biotechnology 10, no. 1 (2019): 1-6.
 
