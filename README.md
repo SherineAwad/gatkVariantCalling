@@ -2,6 +2,7 @@
 
 [![Snakemake](https://img.shields.io/badge/snakemake-≥6.0.2-brightgreen.svg)](https://snakemake.github.io)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![DOI](https://zenodo.org/badge/366034388.svg)](https://zenodo.org/badge/latestdoi/366034388)
 
 
 Snakemake Workflow for Variant Calling
@@ -79,6 +80,12 @@ or:
 
 
     snakemake -j1 configfile config-WGS.yaml 
+
+### Cite Us
+
+If you use this pipeline, please cite us using this DOI:
+
+    Sherine Awad. (2022). SherineAwad/VariantCalling: v1.0.0 (v1.0.0). Zenodo. https://doi.org/10.5281/zenodo.6170399
 
 
 ### References 
