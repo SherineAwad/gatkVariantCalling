@@ -81,7 +81,7 @@ or:
 
     snakemake -j1 configfile config-WGS.yaml 
 
-### Cite Us
+### Citations 
 
 If you use this pipeline, please cite us using this DOI:
 
