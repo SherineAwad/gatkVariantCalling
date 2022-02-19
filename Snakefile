@@ -99,7 +99,7 @@ rule index:
         expand("{genome}.4.bt2", genome = config['GENOME'])
      shell: 
          """
-          bowtie2-build {input} {params} --threads 8
+          bowtie2-build {input} {params} threads 8
           samtools faidx {input} 
          """ 
 
@@ -121,6 +121,13 @@ if config['PAIRED']:
            """
     rule tosam:
        input:
+          expand("{genome}.fasta.fai", genome = config['GENOME']),
+          expand("{genome}.rev.1.bt2", genome = config['GENOME']),
+          expand("{genome}.rev.2.bt2", genome = config['GENOME']),
+          expand("{genome}.1.bt2", genome = config['GENOME']),
+          expand("{genome}.2.bt2", genome = config['GENOME']),
+          expand("{genome}.3.bt2", genome = config['GENOME']),
+          expand("{genome}.4.bt2", genome = config['GENOME']),
           r1 = "galore/{sample}.r_1_val_1.fq.gz",
           r2 = "galore/{sample}.r_2_val_2.fq.gz"
        params:
@@ -145,6 +152,13 @@ else:
            """
      rule tosam:
         input:
+           expand("{genome}.fasta.fai", genome = config['GENOME']),
+           expand("{genome}.rev.1.bt2", genome = config['GENOME']),
+           expand("{genome}.rev.2.bt2", genome = config['GENOME']),
+           expand("{genome}.1.bt2", genome = config['GENOME']),
+           expand("{genome}.2.bt2", genome = config['GENOME']),
+           expand("{genome}.3.bt2", genome = config['GENOME']),
+           expand("{genome}.4.bt2", genome = config['GENOME']),
            "galore/{sample}_trimmed.fq.gz"
         params:
            genome = config['GENOME']
