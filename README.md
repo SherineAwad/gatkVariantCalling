@@ -27,7 +27,7 @@ The pipeline pulls automatically the resources needed by GATK from Broad Institu
 The pipeline uses **Annovar** for annotations. 
 
 
-We use hard filtering. But you can always pass the vcf VariantRecalibrator. You can change the hard filter parameters in the *config file*. 
+We use **hard filtering**. But you can always pass the output vcf  to the VariantRecalibrator. You can change the hard filter parameters in the *config file*. 
 
 ### Run the pipeline 
 
@@ -81,7 +81,7 @@ or:
 
     snakemake -j1 configfile config-WGS.yaml 
 
-### Citations 
+### Citation 
 
 If you use this pipeline, please cite us using this DOI:
 
