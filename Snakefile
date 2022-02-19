@@ -132,6 +132,8 @@ if config['PAIRED']:
           r2 = "galore/{sample}.r_2_val_2.fq.gz"
        params:
           genome = config['GENOME']
+       benchmark: "logs/{sample}.bowtie2.benchmark"
+       conda: 'env/env-align.yaml'
        output:
           "{sample}.sam"
        shell:
@@ -162,6 +164,8 @@ else:
            "galore/{sample}_trimmed.fq.gz"
         params:
            genome = config['GENOME']
+        benchmark: "logs/{sample}.bowtie2.benchmark"
+        conda: 'env/env-align.yaml'
         output:
            "{sample}.sam"
         shell:
