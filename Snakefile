@@ -1,10 +1,13 @@
-configfile: "config.yaml"
-
-ruleorder: index > trim > tosam > AddRG > dedup > recalibrate > tovcf >  GenomeDBImport > jointcall > hard_filter > annotate  
+ruleorder: index > trim > tosam > AddRG > dedup > recalibrate > tovcf >  GenomeDBImport > jointcall  > select_SNPs > select_INDELs > filter_SNPs > filter_INDELs > annotate
+ 
+with open(config['INTERVALS_FILE']) as fp:
+    INTERVALS= fp.read().splitlines()
+print(INTERVALS)
 
 with open(config['SAMPLES']) as fp:
     SAMPLES= fp.read().splitlines()
 print(SAMPLES)
+
 
 
 rule all:
@@ -31,12 +34,19 @@ rule all:
         expand("{genome}.2.bt2", genome = config['GENOME']),
         expand("{genome}.3.bt2", genome = config['GENOME']),
         expand("{genome}.4.bt2", genome = config['GENOME']),
+        expand("{sample}.sam", sample = SAMPLES),
+        expand("{sample}.RG.sam", sample = SAMPLES), 
+        expand("{sample}.dedupped.bam", sample = SAMPLES), 
+        expand("{sample}.recalibrated.bam", sample =SAMPLES),
         expand("{sample}.g.vcf", sample=SAMPLES), 
-        directory(expand("{my_db}", my_db = config['GENOMEDB'])),
-        expand("{cohort}.vcf.gz", cohort=config['ALL_VCF']),
-        expand("{COHORT}.filtered.vcf.gz", COHORT = config['ALL_VCF']),
-        output = expand("{COHORT}.{prefix}.vcf", COHORT=config['ALL_VCF'], prefix=config['annovar_prefix'])
-
+        expand("DB_{interval}", interval =INTERVALS),
+        expand("{interval}.vcf", interval= INTERVALS),
+        expand("{COHORT}.vcf.gz", COHORT = config['ALL_VCF']),
+        expand("{COHORT}_filtered_snps.vcf.gz", COHORT = config['ALL_VCF']), 
+        expand("{COHORT}_filtered_indels.vcf.gz", COHORT = config['ALL_VCF']), 
+        expand("{COHORT}_SNPs.{prefix}.txt", COHORT = config['ALL_VCF'], prefix =config['annovar_prefix'] ),
+        expand("{COHORT}_INDELs.{prefix}.txt", COHORT = config['ALL_VCF'], prefix =config['annovar_prefix'] ),
+ 
 
 rule download: 
      params:
@@ -99,25 +109,26 @@ rule index:
         expand("{genome}.4.bt2", genome = config['GENOME'])
      shell: 
          """
-          bowtie2-build {input} {params} threads 8
+          bowtie2-build {input} {params} --threads 8
           samtools faidx {input} 
-         """ 
-
+         """
 
 if config['PAIRED']:
     rule trim:
        input:
-           r1 = "{sample}.r_1.fq.gz",
-           r2 = "{sample}.r_2.fq.gz"
+           r1 = "{sample}_r1.fastq.gz",
+           r2 = "{sample}_r2.fastq.gz"
+       params:
+           threads= config['THREADS']
        output:
-           "galore/{sample}.r_1_val_1.fq.gz",
-           "galore/{sample}.r_2_val_2.fq.gz"
+           "galore/{sample}_r1_val_1.fq.gz",
+           "galore/{sample}_r2_val_2.fq.gz"
        conda: 'env/env-trim.yaml'
        shell:
            """
            mkdir -p galore
            mkdir -p fastqc
-           trim_galore --gzip --retain_unpaired --trim1 --fastqc --fastqc_args "--outdir fastqc" -o galore --paired {input.r1} {input.r2}
+           trim_galore --gzip --retain_unpaired --trim1 --fastqc --fastqc_args "--outdir fastqc" -o galore --paired {input.r1} {input.r2} --cores {params.threads}
            """
     rule tosam:
        input:
@@ -128,21 +139,24 @@ if config['PAIRED']:
           expand("{genome}.2.bt2", genome = config['GENOME']),
           expand("{genome}.3.bt2", genome = config['GENOME']),
           expand("{genome}.4.bt2", genome = config['GENOME']),
-          r1 = "galore/{sample}.r_1_val_1.fq.gz",
-          r2 = "galore/{sample}.r_2_val_2.fq.gz"
+          r1 = "galore/{sample}_r1_val_1.fq.gz",
+          r2 = "galore/{sample}_r2_val_2.fq.gz" 
        params:
-          genome = config['GENOME']
+          genome = config['GENOME'],
+          threads = config['THREADS']
        benchmark: "logs/{sample}.bowtie2.benchmark"
        conda: 'env/env-align.yaml'
        output:
           "{sample}.sam"
        shell:
-          "bowtie2 -x {params.genome} -1 {input.r1} -2 {input.r2} -S {output}"
+          "bowtie2 -x {params.genome} -1 {input.r1} -2 {input.r2} -S {output} -p {params.threads}" 
+
 else:
      rule trim:
        input:
-           "{sample}.fq.gz",
-
+           "{sample}_r1.fastq.gz",
+       params:
+          threads = config['THREADS']
        output:
            "galore/{sample}_trimmed.fq.gz",
        conda: 'env/env-trim.yaml'
@@ -150,7 +164,7 @@ else:
            """
            mkdir -p galore
            mkdir -p fastqc
-           trim_galore --gzip --retain_unpaired --trim1 --fastqc --fastqc_args "--outdir fastqc" -o galore {input}
+           trim_galore --gzip --retain_unpaired --trim1 --fastqc --fastqc_args "--outdir fastqc" -o galore {input} --cores {params.threads}
            """
      rule tosam:
         input:
@@ -163,27 +177,31 @@ else:
            expand("{genome}.4.bt2", genome = config['GENOME']),
            "galore/{sample}_trimmed.fq.gz"
         params:
-           genome = config['GENOME']
+           genome = config['GENOME'],
+           threads = config['THREADS']
         benchmark: "logs/{sample}.bowtie2.benchmark"
         conda: 'env/env-align.yaml'
         output:
            "{sample}.sam"
         shell:
-           "bowtie2 -x {params.genome} -U {input} -S {output}"
+           "bowtie2 -x {params.genome} -U {input} -S {output}  -p {params.threads}"
 
-rule AddRG: 
-    input: 
-       '{sample}.sam'
-    output: 
-       '{sample}.RG.sam' 
+
+rule AddRG:
+    input:
+       '{sample}.sam',
+    output:
+       '{sample}.RG.sam'
     log: "logs/{sample}.addRG.log"
     benchmark: "logs/{sample}.AddRG.benchmark"
-    conda: 'env/env-picard.yaml'  
-    params: 
-        RG = config['RG']
+    conda: 'env/env-picard.yaml'
+    params:
+        PL = config['PL'], 
+        fastq_file = '{sample}_r1.fastq.gz'
     shell:
-        "picard AddOrReplaceReadGroups I={input} O={output} SO=coordinate RGID=@{params} RGSM={wildcards.sample} RGPL=Illumina RGLB={wildcards.sample} RGPU={params}_{wildcards.sample} VALIDATION_STRINGENCY=SILENT" 
-
+        """
+         python src/RG.py -s {input} -f {params.fastq_file} -o {output} -p {params.PL}
+        """
 
 rule dedup: 
      input: 
@@ -209,113 +227,186 @@ rule recalibrate:
          '{sample}.recalibrated.bam'
     params: 
         mem = "-Xmx100g",
+        threads = "-XX:ParallelGCThreads=2",
         knownsites1 = config['DBSNP'],
         knownsites2 = config['INDELS'],
         knownsites3 = config['GOLD_STANDARD']
     shell:
        """
-       gatk --java-options {params.mem} BaseRecalibrator -I {input.sample} -R {input.genome} --known-sites {params.knownsites1} --known-sites {params.knownsites2} --known-sites {params.knownsites3} -O {output[0]}
+       gatk --java-options {params.mem} {params.threads} BaseRecalibrator -I {input.sample} -R {input.genome} --known-sites {params.knownsites1} --known-sites {params.knownsites2} --known-sites {params.knownsites3} -O {output[0]}
        gatk --java-options {params.mem} ApplyBQSR  -I {input.sample} -R {input.genome} --bqsr-recal-file {output[0]} -O {output[1]} 
        """ 
 
 rule tovcf:
    input:
-      "{sample}.recalibrated.bam",
-      expand("{genome}.fasta", genome=config['GENOME'])
+        "{sample}.recalibrated.bam",
+        expand("{genome}.fasta", genome=config['GENOME'])
    params:
-     mem_threads = {"-Xmx100g -XX:ParallelGCThreads=4"}
+       mem_threads = {"-Xmx100g -XX:ParallelGCThreads=4"}
    log: "logs/{sample}.tovcf.log"
    benchmark: "logs/{sample}.tovcf.benchmark"  
-   conda: 'env/env-gatk.yaml'
+   conda: "env/env-gatk.yaml"
    output:
        "{sample}.g.vcf" 
    shell:
        """
-       gatk --java-options "{params.mem_threads}" HaplotypeCaller -R {input[1]} -I {input[0]} -ERC GVCF -O {output[0]} -G StandardAnnotation -G AS_StandardAnnotation
+       gatk --java-options "{params.mem_threads}" HaplotypeCaller -R {input[1]} -I {input[0]} -ERC GVCF -O {output} -G StandardAnnotation -G AS_StandardAnnotation
+       
        """
 
-rule GenomeDBImport: 
+rule GenomeDBImport:
      input:
-         sample = expand("{sample}.g.vcf", sample = SAMPLES),
-         genome = expand("{genome}.fasta", genome=config['GENOME'])
-     params:
-         INTERVALS = config['INTERVALS_FILE'],
-         DB = config['GENOMEDB'],
-         mem = {"-Xmx100g"},
-         I =  lambda w: "-V " + " -V ".join(expand("{sample}.g.vcf", sample = SAMPLES))
-     log: "logs/dbimport.log"
-     benchmark: "logs/DBImport.benchmark"
-     conda: 'env/env-gatk.yaml'
-     output:
-        directory(expand("{my_db}", my_db = config['GENOMEDB'])) 
+        expand("logs/{sample}.tovcf.log", sample = SAMPLES) 
+     params: 
+         lambda w: "-V " + " -V ".join(expand("{sample}.g.vcf", sample =SAMPLES)),
+         interval = "{interval}",
+         mem = {"-Xmx100g"}
+     log: 
+        "logs/dbimport_{interval}.log"
+     benchmark: 
+        "logs/dbimport_{interval}.benchmark"
+     conda: 
+        "env/env-gatk.yaml"
+     output: 
+         directory("DB_{interval}") 
      shell:
          """
-         gatk --java-options {params.mem} GenomicsDBImport {params.I} --genomicsdb-workspace-path {params.DB} -L {params.INTERVALS} 
+           gatk --java-options {params.mem} GenomicsDBImport {params[0]} --genomicsdb-workspace-path {output} -L {params.interval}
          """
 
 rule jointcall: 
     input:
-       DB = directory(expand("{my_db}", my_db = config['GENOMEDB'])), 
-       genome = expand("{genome}.fasta", genome=config['GENOME'])
+        DB = "DB_{chr}",
+        genome = expand("{genome}.fasta", genome=config['GENOME'])
     params:
-       mem = {"-Xmx100g"}
-    log: "logs/jointcall.log"
-    benchmark: "logs/jointcall.benchmark"
+        lambda w: "-V " + " -V ".join(expand("{sample}.g.vcf", sample =SAMPLES)),
+        V = "gendb://DB_{chr}",
+        mem = {"-Xmx100g"}
+    log: "logs/jointcall_{chr}.log"
+    benchmark: "logs/jointcall_{chr}.benchmark"
     conda: 'env/env-gatk.yaml' 
     output:
-       expand("{cohort}.vcf.gz", cohort=config['ALL_VCF'])
+       "{chr}.vcf"
     shell:
         """
-          gatk --java-options {params.mem} GenotypeGVCFs -R {input.genome} -V gendb://{input.DB} -O {output} -G StandardAnnotation -G AS_StandardAnnotation
+          gatk --java-options {params.mem} GenotypeGVCFs -R {input.genome} -V {params.V} -O {output} -G StandardAnnotation -G AS_StandardAnnotation
         """
 
-rule annotate: 
+rule merge:
      input: 
-         vcf = expand("{COHORT}.filtered.vcf.gz", COHORT=config['ALL_VCF'] )
-     params: 
-          humanDB = config['humanDB'],
-          version = config['version'], 
-          ANNOVAR = config['ANNOVAR'],
-          output = config['ALL_VCF']
-     log: "logs/annotate.log" 
-     benchmark: "logs/annotate.benchmark" 
-     output:
-         expand("{COHORT}.{prefix}.vcf", COHORT = config['ALL_VCF'], prefix =config['annovar_prefix'] )
-     shell:
+         expand("{chr}.vcf" , chr=INTERVALS)
+     params:  
+          I =  lambda w: "I= " + " I= ".join(expand("{chr}.vcf", chr =INTERVALS))
+     output: 
+          expand("{COHORT}.vcf.gz", COHORT = config['ALL_VCF'])
+     shell: 
          """
-          {params.ANNOVAR}/table_annovar.pl {input.vcf} {params.humanDB} -buildver {params.version} -out {params.output} \
-          -remove -protocol refGene,ensGene,cytoBand,exac03,gnomad_exome,avsnp147,dbnsfp33a,clinvar_20170130,revel -operation g,g,f,f,f,f,f,f,f  -nastring . -vcfinput  
+         picard MergeVcfs {params.I} O= {output}
          """
 
-rule hard_filter: 
+rule select_SNPs: 
     input: 
-         vcf = expand("{COHORT}.vcf.gz", COHORT = config['ALL_VCF'])
-    params:
-        qd = config['QD'], 
-        qual = config['QUAL'],
-        sor = config['SOR'],
-        fs = config['FS'], 
-        mq = config['MQ'], 
-        mqranksum = config['MQRankSum'],
-        readposranksum = config['ReadPosRankSum']
-    log: "logs/filter.log"
-    benchmark: "logs/filter.benchmark"
-    conda: 'env/env-gatk.yaml'
-    output:
-         output = expand("{COHORT}.filtered.vcf.gz", COHORT=config['ALL_VCF'])
+        vcf = expand("{COHORT}.vcf.gz", COHORT = config['ALL_VCF']) 
+    output: 
+         "{COHORT}_SNPs.vcf.gz" 
     shell: 
          """
-         gatk VariantFiltration \
-         -V {input} \
-         -filter "QD < {params.qd}" --filter-name "QD2" \
-         -filter "QUAL < {params.qual}" --filter-name "QUAL30" \
-         -filter "SOR > {params.sor}" --filter-name "SOR3" \
-         -filter "FS > {params.fs}" --filter-name "FS60" \
-         -filter "MQ < {params.mq}" --filter-name "MQ40" \
-         -filter "MQRankSum < {params.mqranksum}" --filter-name "MQRankSum-12.5" \
-         -filter "ReadPosRankSum < {params.readposranksum}" --filter-name "ReadPosRankSum-8" \
-         -O {output}
+         gatk SelectVariants -V {input} -select-type SNP -O {output} 
+         """ 
+
+rule select_INDELs:
+    input:
+        vcf = expand("{COHORT}.vcf.gz", COHORT = config['ALL_VCF'])
+    output:
+         "{COHORT}_INDELs.vcf.gz" 
+    shell:
          """
+         gatk SelectVariants -V {input} -select-type INDEL -O {output}
+         """
+
+rule filter_SNPs: 
+    input: 
+       "{COHORT}_SNPs.vcf.gz" 
+    output:   
+       "{COHORT}_filtered_snps.vcf.gz"
+    params: 
+       qd = config['QD'],
+       qual = config['QUAL'],
+       sor = config['SNP_SOR'],
+       fs = config['SNP_FS'],
+       mq = config['SNP_MQ'], 
+       mqranksum = config['SNP_MQRankSum'], 
+       readposranksum = config['SNP_ReadPosRankSum']
+    log: "logs/{COHORT}_snps_filter.log"
+    benchmark: "logs/{COHORT}_snps_filter.benchmark"
+    conda: 'env/env-gatk.yaml'  
+    shell:
+        """ 
+	gatk VariantFiltration \
+        -V {input} \
+        -filter "QD < {params.qd}" --filter-name "QD2" \
+        -filter "QUAL < {params.qual}" --filter-name "QUAL30" \
+        -filter "SOR > {params.sor}" --filter-name "SOR3" \
+        -filter "FS > {params.fs}"  --filter-name "FS60" \
+        -filter "MQ <  {params.mq}" --filter-name "MQ40" \
+        -filter "MQRankSum < {params.mqranksum}" --filter-name "MQRankSum-12.5" \
+        -filter "ReadPosRankSum < {params.readposranksum}" --filter-name "ReadPosRankSum-8" \
+        -O {output} 
+       """
+
+
+
+rule filter_INDELs:  
+    input:
+       "{COHORT}_INDELs.vcf.gz"
+    output:
+       "{COHORT}_filtered_indels.vcf.gz"
+    params: 
+       qd = config['QD'],
+       qual = config['QUAL'],
+       fs = config['INDEL_FS'],
+       readposranksum = config['INDEL_ReadPosRankSum']
+    log: "logs/{COHORT}_indels_filter.log"
+    benchmark: "logs/{COHORT}_indels_filter.benchmark"
+    conda: "env/env-gatk.yaml"
+    shell: 
+       """ 
+       gatk VariantFiltration -V {input} \ 
+       -filter "QD < {params.qd}" --filter-name "QD2" \
+       -filter "QUAL < {params.qual}" --filter-name "QUAL30" \
+       -filter "FS > {params.fs}" --filter-name "FS200" \
+       -filter "ReadPosRankSum < {params.readposranksum}" --filter-name "ReadPosRankSum-20" \ 
+       -O {output} 
+       """ 
+
+rule annotate:
+     input:
+         snps = expand("{COHORT}_filtered_snps.vcf.gz", COHORT=config['ALL_VCF'] ), 
+         indels = expand("{COHORT}_filtered_indels.vcf.gz", COHORT = config['ALL_VCF']) 
+     params:
+          humanDB = config['humanDB'],
+          version = config['version'],
+          ANNOVAR = config['ANNOVAR'],
+          snps_prefix = expand("{COHORT}_SNPs", COHORT= config['ALL_VCF']), 
+          indels_prefix =  expand("{COHORT}_INDELs", COHORT= config['ALL_VCF']),
+     log: "logs/annotate.log"
+     benchmark: "logs/annotate.benchmark"
+     output:
+         expand("{COHORT}_SNPs.{prefix}.txt", COHORT = config['ALL_VCF'], prefix =config['annovar_prefix'] ),
+         expand("{COHORT}_SNPs.{prefix}.vcf", COHORT = config['ALL_VCF'], prefix =config['annovar_prefix'] ),
+         expand("{COHORT}_INDELs.{prefix}.txt", COHORT = config['ALL_VCF'], prefix =config['annovar_prefix'] ),
+         expand("{COHORT}_INDELs.{prefix}.vcf", COHORT = config['ALL_VCF'], prefix =config['annovar_prefix'] ) 
+     shell:
+         """
+          {params.ANNOVAR}/table_annovar.pl {input.snps} {params.humanDB} -buildver {params.version} -out {params.snps_prefix} \
+          -remove -protocol refGene,ensGene,cytoBand,exac03,gnomad_exome,avsnp147,dbnsfp33a,clinvar_20170130,revel -operation g,g,f,f,f,f,f,f,f  -nastring . -vcfinput
+          
+          {params.ANNOVAR}/table_annovar.pl {input.indels} {params.humanDB} -buildver {params.version} -out {params.indels_prefix} \
+          -remove -protocol refGene,ensGene,cytoBand,exac03,gnomad_exome,avsnp147,dbnsfp33a,clinvar_20170130,revel -operation g,g,f,f,f,f,f,f,f  -nastring . -vcfinput
+         """
+
+
+
 
 
 
